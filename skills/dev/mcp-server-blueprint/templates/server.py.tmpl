@@ -1,0 +1,131 @@
+"""
+Entry point del servidor MCP.
+
+Crea la instancia FastMCP, registra las tools desde tools.py,
+carga configuración desde .env, e inicia el transporte stdio.
+
+Uso:
+    python server.py
+    # El servidor escucha en stdin/stdout (transporte JSON-RPC)
+    # Integración con Claude Code, Cursor, etc.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+from fastmcp import FastMCP
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,  # stderr para no contaminar stdout (que es el transporte MCP)
+)
+logger = logging.getLogger(__name__)
+
+# ── Cargar variables de entorno ──────────────────────────────────────────────
+env_path = Path(__file__).resolve().parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+    logger.info("Config loaded from .env")
+else:
+    logger.warning("No .env file found — using environment variables only")
+
+
+# ── Configuración ────────────────────────────────────────────────────────────
+def load_config() -> dict:
+    """Carga y valida la configuración desde variables de entorno.
+
+    Returns:
+        Dict con configuración validada.
+    """
+    required_vars = {
+        "API_BASE_URL": "https://api.default.local",
+    }
+
+    config = {}
+    missing: list[str] = []
+
+    for var, default in required_vars.items():
+        value = os.getenv(var, default)
+        if value == "" and default is None:
+            missing.append(var)
+        config[var.lower()] = value
+
+    # Variables opcionales
+    config["api_key"] = os.getenv("API_KEY", "")
+    config["log_level"] = os.getenv("LOG_LEVEL", "INFO").upper()
+    config["timeout_seconds"] = float(os.getenv("TIMEOUT_SECONDS", "30"))
+
+    if missing:
+        logger.warning(f"Missing required config: {', '.join(missing)}")
+
+    logging.getLogger().setLevel(config["log_level"])
+    return config
+
+
+# ── Crear servidor MCP ───────────────────────────────────────────────────────
+config = load_config()
+
+mcp = FastMCP(
+    name=os.getenv("MCP_SERVER_NAME", "my-mcp-server"),
+    version=os.getenv("MCP_SERVER_VERSION", "1.0.0"),
+    description="MCP server — auto-generated from mcp-server-blueprint",
+)
+
+
+# ── Registrar tools (desde tools.py) ─────────────────────────────────────────
+# Importar tools.py para que los decoradores @mcp.tool() se ejecuten
+# y registren cada tool en la instancia `mcp`.
+import tools  # noqa: F401  # pylint: disable=unused-import
+
+logger.info(f"MCP server '{mcp.name}' initialized with tools registration")
+
+
+# ── Health check (tool interna) ──────────────────────────────────────────────
+@mcp.tool()
+def ping() -> dict:
+    """Health check del servidor. Útil para verificar conectividad.
+
+    Returns:
+        Dict con status, version, y timestamp.
+    """
+    from datetime import datetime, timezone
+
+    return {
+        "status": "ok",
+        "server": mcp.name,
+        "version": mcp.version,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ── Entry point ──────────────────────────────────────────────────────────────
+def main() -> None:
+    """Inicia el servidor MCP con transporte stdio.
+
+    El servidor permanece a la escucha en stdin/stdout hasta que el
+    proceso host (Claude Code, Cursor, etc.) lo termine.
+    """
+    logger.info(f"Starting MCP server: {mcp.name} v{mcp.version}")
+    logger.info(f"Transport: stdio (JSON-RPC)")
+    logger.info(f"Log level: {config['log_level']}")
+
+    try:
+        # run() usa stdio transport por defecto
+        mcp.run(transport="stdio")
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user (SIGINT)")
+        sys.exit(0)
+    except Exception as exc:
+        logger.critical(f"Fatal server error: {exc}", exc_info=True)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,43 @@
+{
+  "schema_version": "2.0",
+  "description": "Esquema de referencia para el sistema multi-sesión de memoria de reinicio",
+  "files": {
+    "memoria-reinicio.md": {
+      "description": "Tracker multi-sesión — resumen de TODAS las sesiones abiertas. Archivo centinela que el orquestador detecta al iniciar.",
+      "auto_generated": true,
+      "never_edit_manually": true
+    },
+    "memoria-sessions/index.json": {
+      "description": "Índice maestro — metadatos de todas las sesiones (id, proyecto, prioridad, estado, tareas)",
+      "auto_generated": false,
+      "format": {
+        "sesiones": [
+          {
+            "id": "string — ID único de la sesión (MEMORIA-{PROYECTO})",
+            "label": "string — Nombre legible del proyecto",
+            "prioridad": "string — 🔴 CRÍTICO | 🟡 ALTA | 🟢 MEDIA",
+            "proyecto": "string — nombre del proyecto (slug)",
+            "tareas": "int — número de tareas pendientes",
+            "tareas_completadas": "int — número de tareas completadas",
+            "ultima_actividad": "string — fecha ISO",
+            "estado": "string — pendiente | en_curso | completada",
+            "owner": "string — quien creó la sesión"
+          }
+        ]
+      }
+    },
+    "memoria-sessions/MEMORIA-{ID}.md": {
+      "description": "Sesión individual — plan detallado, checklist, commits, estado de UN proyecto",
+      "template": "MEMORIA-TEMPLATE.md"
+    },
+    "memoria-sessions/session-actual.md": {
+      "description": "Sesión activa — contiene solo el ID de la sesión que se está trabajando en esta ventana",
+      "content": "ID de la sesión activa o 'NINGUNA'"
+    }
+  },
+  "rules": {
+    "index_json_is_truth": "El index.json es la fuente de verdad. session-actual.md es solo un atajo para la ventana actual.",
+    "never_edit_memoria_reinicio": "El tracker multi-sesión se regenera automáticamente. NO se edita manualmente.",
+    "one_session_per_file": "Cada proyecto tiene su propio archivo MEMORIA-{ID}.md. No se mezclan."
+  }
+}

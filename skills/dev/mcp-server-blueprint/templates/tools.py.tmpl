@@ -1,0 +1,329 @@
+"""
+Implementación de las tools MCP.
+
+Cada función decorada con @mcp.tool() es una herramienta que el LLM
+puede descubrir e invocar. El decorador extrae automáticamente el schema
+(type hints + docstring) y lo expone vía JSON-RPC.
+
+REGLAS:
+- Type hints COMPLETOS en parámetros y retorno
+- Docstring descriptivo (>1 línea, explica QUÉ hace la tool)
+- Nombres: verbo en imperativo inglés + snake_case
+- Parámetros con default values siempre que sea posible
+- Errores retornados como dict, no excepciones crudas
+- Tools async para I/O, sync para cómputo puro
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
+from typing import Any
+
+from fastmcp.exceptions import MCPError
+from pydantic import BaseModel, Field
+
+# El servidor exporta `mcp` desde server.py — se importa aquí para @mcp.tool()
+# Esto funciona porque server.py hace `import tools` después de crear mcp.
+from server import mcp, config
+
+# ── Cliente HTTP (para tools que consumen APIs externas) ─────────────────────
+from client import APIClient
+
+client = APIClient(
+    base_url=config["api_base_url"],
+    api_key=config["api_key"],
+    timeout=config["timeout_seconds"],
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tools básicas (sin I/O externo)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool()
+def hello(name: str = "World") -> str:
+    """Saluda al usuario. Tool simple para verificar conectividad.
+
+    Args:
+        name: Nombre de la persona a saludar (default: "World").
+
+    Returns:
+        Saludo personalizado.
+    """
+    return f"Hello, {name}! 👋"
+
+
+@mcp.tool()
+def calculate(expression: str) -> dict:
+    """Evalúa una expresión matemática simple y retorna el resultado.
+
+    Args:
+        expression: Expresión matemática como "2 + 2" o "sqrt(144)".
+
+    Returns:
+        Dict con la expresión, resultado, y tipo de operación.
+    """
+    import ast
+    import math
+    import operator
+
+    # Operadores seguros
+    safe_ops = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.USub: operator.neg,
+    }
+    safe_names = {
+        "sqrt": math.sqrt,
+        "abs": abs,
+        "round": round,
+        "min": min,
+        "max": max,
+        "pi": math.pi,
+        "e": math.e,
+    }
+
+    def _eval(node: ast.AST) -> float:
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, (int, float)):
+                return float(node.value)
+            raise ValueError(f"Unsupported constant: {type(node.value).__name__}")
+        if isinstance(node, ast.BinOp):
+            op_func = safe_ops.get(type(node.op))
+            if op_func is None:
+                raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
+            return op_func(_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp):
+            op_func = safe_ops.get(type(node.op))
+            if op_func is None:
+                raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
+            return op_func(_eval(node.operand))
+        if isinstance(node, ast.Call):
+            func_name = node.func.id if isinstance(node.func, ast.Name) else None
+            if func_name not in safe_names:
+                raise ValueError(f"Unsupported function: '{func_name}'")
+            args = [_eval(arg) for arg in node.args]
+            return safe_names[func_name](*args)
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        raise ValueError(f"Unsupported expression type: {type(node).__name__}")
+
+    try:
+        parsed = ast.parse(expression.strip(), mode="eval")
+        result = _eval(parsed.body)
+        return {
+            "expression": expression.strip(),
+            "result": round(result, 6) if isinstance(result, float) else result,
+            "type": type(result).__name__,
+            "valid": True,
+        }
+    except (SyntaxError, ValueError, TypeError) as exc:
+        return {
+            "expression": expression.strip(),
+            "error": str(exc),
+            "valid": False,
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tools con I/O (async) — consumen APIs externas vía APIClient
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool()
+async def get_user(user_id: str) -> dict:
+    """Obtiene un usuario por su ID. Consulta la API externa.
+
+    Args:
+        user_id: ID único del usuario a consultar.
+
+    Returns:
+        Dict con datos del usuario (id, name, email, etc.) o error.
+    """
+    if not user_id or not user_id.strip():
+        return {"error": "user_id is required", "valid": False}
+
+    try:
+        result = await client.get(f"/users/{user_id.strip()}")
+        return {"valid": True, **result}
+    except client.APIError as exc:
+        if exc.status_code == 404:
+            return {"error": f"User '{user_id}' not found", "valid": False, "user_id": user_id}
+        logger.error(f"API error fetching user {user_id}: {exc}")
+        return {"error": f"API error: {exc}", "valid": False, "user_id": user_id}
+    except Exception as exc:
+        logger.error(f"Unexpected error fetching user {user_id}: {exc}")
+        return {"error": f"Internal error: {exc}", "valid": False, "user_id": user_id}
+
+
+@mcp.tool()
+async def search_items(query: str, limit: int = 10, offset: int = 0) -> dict:
+    """Busca ítems en el catálogo por query de texto.
+
+    Args:
+        query: Término de búsqueda (mínimo 2 caracteres).
+        limit: Máximo de resultados a retornar (1-100, default: 10).
+        offset: Desplazamiento para paginación (default: 0).
+
+    Returns:
+        Dict con resultados, total count, y metadatos de paginación.
+    """
+    if not query or len(query.strip()) < 2:
+        return {"error": "query must be at least 2 characters", "valid": False}
+
+    limit = max(1, min(100, limit))
+    offset = max(0, offset)
+
+    try:
+        result = await client.get(
+            "/items/search",
+            params={"q": query.strip(), "limit": limit, "offset": offset},
+        )
+        return {
+            "valid": True,
+            "results": result.get("items", []),
+            "total": result.get("total", 0),
+            "limit": limit,
+            "offset": offset,
+        }
+    except client.APIError as exc:
+        logger.error(f"Search API error: {exc}")
+        return {"error": f"Search failed: {exc}", "valid": False}
+    except Exception as exc:
+        logger.error(f"Unexpected search error: {exc}")
+        return {"error": "Internal search error", "valid": False}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tools con Pydantic BaseModel (parámetros complejos)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class Address(BaseModel):
+    """Dirección postal para envíos."""
+
+    street: str = Field(..., description="Calle y número")
+    city: str = Field(..., description="Ciudad")
+    state: str = Field(..., description="Estado o departamento")
+    zip_code: str = Field(..., description="Código postal (5 dígitos)")
+    country: str = Field("US", description="Código de país ISO 3166-1 alpha-2")
+
+
+class CreateOrderItem(BaseModel):
+    """Producto individual en una orden."""
+
+    product_id: str = Field(..., description="ID del producto")
+    quantity: int = Field(..., ge=1, le=100, description="Cantidad (1-100)")
+    unit_price: float | None = Field(None, ge=0, description="Precio unitario (opcional)")
+
+
+class CreateOrderInput(BaseModel):
+    """Modelo de entrada para creación de orden."""
+
+    user_id: str = Field(..., min_length=1, description="ID del cliente")
+    items: list[CreateOrderItem] = Field(..., min_length=1, description="Productos en la orden")
+    coupon_code: str | None = Field(None, description="Código de descuento opcional")
+    shipping_address: Address = Field(..., description="Dirección de envío")
+    notes: str | None = Field(None, max_length=500, description="Notas adicionales")
+
+
+@mcp.tool()
+async def create_order(input_data: CreateOrderInput) -> dict:
+    """Crea una orden de compra. Valida inventario, calcula totales, aplica descuentos.
+
+    Args:
+        input_data: Datos completos de la orden (modelo estructurado con Pydantic).
+
+    Returns:
+        Dict con order_id, status, items, total, y estimación de envío.
+    """
+    try:
+        payload = input_data.model_dump(mode="json")
+        result = await client.post("/orders", json=payload)
+        return {
+            "valid": True,
+            "order_id": result.get("order_id"),
+            "status": result.get("status", "pending"),
+            "total": result.get("total"),
+            "items_count": len(input_data.items),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    except client.APIError as exc:
+        logger.error(f"Order creation failed: {exc}")
+        if exc.status_code == 422:
+            return {"error": f"Validation error: {exc.details}", "valid": False}
+        return {"error": f"Order API error: {exc}", "valid": False}
+    except Exception as exc:
+        logger.error(f"Unexpected order error: {exc}")
+        return {"error": "Internal error creating order", "valid": False}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tools con MCPError (errores que el LLM puede interpretar)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool()
+def delete_item(item_id: str, force: bool = False) -> dict:
+    """Elimina un ítem del catálogo por ID.
+
+    Args:
+        item_id: ID del ítem a eliminar.
+        force: Si True, omite verificación de seguridad.
+
+    Returns:
+        Dict con confirmación de eliminación.
+
+    Raises:
+        MCPError: Si el ítem no existe o no se puede eliminar.
+    """
+    if not item_id or not item_id.strip():
+        raise MCPError("item_id is required")
+
+    # Simulación: verificar existencia
+    # En producción: reemplazar con consulta real a DB/API
+    if item_id == "nonexistent":
+        raise MCPError(f"Item '{item_id}' not found — cannot delete")
+
+    if not force and item_id.startswith("protected-"):
+        raise MCPError(
+            f"Item '{item_id}' is protected. Use force=True to delete anyway."
+        )
+
+    logger.info(f"Deleted item: {item_id} (force={force})")
+    return {
+        "deleted": True,
+        "item_id": item_id,
+        "force": force,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tools de utilidad
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool()
+def get_server_info() -> dict:
+    """Retorna información detallada del servidor MCP.
+
+    Útil para diagnóstico y verificación de conectividad.
+
+    Returns:
+        Dict con nombre, versión, uptime, configuración (sin secrets).
+    """
+    return {
+        "server_name": mcp.name,
+        "server_version": mcp.version,
+        "api_base_url": config.get("api_base_url"),
+        "timeout_seconds": config.get("timeout_seconds"),
+        "python_version": sys.version.split()[0],
+    }

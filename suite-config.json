@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "suite_name": "Client Agent Suite",
+  "description": "Configuración interactiva para desplegar la suite de agentes OpenCode en el equipo del cliente",
+  "questions": [
+    {
+      "id": "client_name",
+      "question": "🏢 Nombre del cliente o proyecto:",
+      "hint": "Ej: AcmeCorp, MariaSoluciones, TechStartup",
+      "validation": "non_empty",
+      "placeholder": "NombreCliente",
+      "var": "CLIENT_NAME"
+    },
+    {
+      "id": "orchestrator_name",
+      "question": "🤖 Nombre del agente orquestador principal:",
+      "hint": "El agente que coordinará a todos los demás. Déjalo vacío para usar el nombre del cliente.",
+      "validation": "optional",
+      "placeholder": "{{CLIENT_NAME}}",
+      "default": "",
+      "var": "ORQUESTADOR"
+    },
+    {
+      "id": "workspace_path",
+      "question": "📁 Ruta del workspace del proyecto (directorio de trabajo principal):",
+      "hint": "Ruta absoluta donde estarán los proyectos del cliente. Ej: /home/user/projects o C:\\Users\\User\\projects",
+      "validation": "non_empty",
+      "placeholder": "/home/usuario/proyectos",
+      "var": "WORKSPACE_PATH"
+    },
+    {
+      "id": "admin_email",
+      "question": "📧 Email del administrador de la suite:",
+      "hint": "Se usará como identificación general en la suite",
+      "validation": "email",
+      "placeholder": "admin@cliente.com",
+      "var": "ADMIN_EMAIL"
+    },
+    {
+      "id": "opencode_config_path",
+      "question": "⚙️ Ruta de configuración de OpenCode:",
+      "hint": "Normalmente ~/.config/opencode/. Presiona Enter para usar el valor por defecto.",
+      "validation": "optional",
+      "default": "~/.config/opencode",
+      "var": "OPENCODE_CONFIG_PATH"
+    },
+    {
+      "id": "agents_home",
+      "question": "📂 Directorio para agentes y skills:",
+      "hint": "Normalmente ~/.agents/. Presiona Enter para usar el valor por defecto.",
+      "validation": "optional",
+      "default": "~/.agents",
+      "var": "AGENTS_HOME"
+    },
+    {
+      "id": "default_model",
+      "question": "🧠 Modelo por defecto para los agentes:",
+      "hint": "Consultar modelos disponibles en OpenCode. Recomendado: opencode-go/deepseek-v4-flash",
+      "validation": "optional",
+      "default": "opencode-go/deepseek-v4-flash",
+      "var": "DEFAULT_MODEL"
+    },
+    {
+      "id": "pro_model",
+      "question": "⭐ Modelo premium (para el agente auditor):",
+      "hint": "Modelo de alta calidad para revisiones críticas. Recomendado: opencode-go/deepseek-v4-pro",
+      "validation": "optional",
+      "default": "opencode-go/deepseek-v4-pro",
+      "var": "PRO_MODEL"
+    },
+    {
+      "id": "multimodal_model",
+      "question": "🖼️ Modelo multimodal (para análisis visual):",
+      "hint": "Recomendado: opencode-go/mimo-v2.5 para capacidad multimodal",
+      "validation": "optional",
+      "default": "opencode-go/mimo-v2.5",
+      "var": "MULTIMODAL_MODEL"
+    }
+  ],
+  "post_install": {
+    "message": "✅ Suite instalada correctamente. Revisa CONFIGURATION.md para los pasos finales de configuración.",
+    "pending_tasks": [
+      "Configurar API key de OpenCode en el archivo .env",
+      "Configurar MCP servers (Playwright, etc.)",
+      "Configurar cuentas de servicio (Google, GitHub, etc.)",
+      "Iniciar tu primer proyecto con: opencode",
+      "El orquestador guardará automáticamente el progreso en memoria-sessions/"
+    ]
+  }
+}

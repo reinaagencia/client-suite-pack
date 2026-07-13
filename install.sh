@@ -215,7 +215,10 @@ main() {
     
     # Pasar license key como variable de entorno para que builder.sh la use
     export SUITE_LICENSE_KEY="${LICENSE_KEY}"
-    (cd "$INSTALL_DIR" && bash builder.sh) || { error "Error ejecutando builder.sh"; exit 1; }
+    # Pasar flag --auto si estamos en modo auto
+    local BUILDER_FLAGS=""
+    [ "$AUTO_MODE" = true ] && BUILDER_FLAGS="--auto"
+    (cd "$INSTALL_DIR" && bash builder.sh $BUILDER_FLAGS) || { error "Error ejecutando builder.sh"; exit 1; }
     
     # ─── 5. Registrar instalación ─────────────────────────────────────
     if [ -n "$LICENSE_KEY" ]; then

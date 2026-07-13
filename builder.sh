@@ -49,6 +49,9 @@ DEFAULT_MODEL=""
 PRO_MODEL=""
 MULTIMODAL_MODEL=""
 
+# ─── Auto mode (usar valores por defecto) ──
+AUTO_MODE=false
+
 # ─── Funciones de utilidad ────────────────────────────────────────────────────
 
 log()     { echo -e "${GREEN}[✓]${NC} $1"; echo "[$(date +%H:%M:%S)] [✓] $1" >> "$LOG_FILE"; }
@@ -119,6 +122,15 @@ check_prereqs() {
 
 collect_config() {
     header "FASE 2/10 — Configuración de la Suite"
+
+    if [ "$AUTO_MODE" = true ]; then
+        info "Modo auto: usando valores por defecto"
+        log "Cliente: $CLIENT_NAME"
+        log "Orquestador: $ORQUESTADOR"
+        log "Workspace: $WORKSPACE_PATH"
+        display_config_summary
+        return
+    fi
 
     echo -e "${CYAN}Vamos a configurar tu suite de agentes.${NC}"
     echo -e "${CYAN}Responde las siguientes preguntas. Puedes presionar Enter para usar el valor por defecto.${NC}\n"
@@ -835,6 +847,34 @@ EOF
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 main() {
+    # ─── Parsear flags ───
+    for arg in "$@"; do
+        case $arg in
+            --auto) AUTO_MODE=true ;;
+            --help|-h)
+                echo "Uso: bash builder.sh [--auto]"
+                echo ""
+                echo "Opciones:"
+                echo "  --auto       Usa valores por defecto"
+                echo "  --help       Muestra esta ayuda"
+                exit 0
+                ;;
+        esac
+    done
+
+    # ─── Auto mode: valores por defecto ───
+    if [ "$AUTO_MODE" = true ]; then
+        CLIENT_NAME="${CLIENT_NAME:-Cliente}"
+        ORQUESTADOR="${ORQUESTADOR:-$CLIENT_NAME}"
+        WORKSPACE_PATH="${WORKSPACE_PATH:-$HOME/Dev}"
+        ADMIN_EMAIL="${ADMIN_EMAIL:-admin@${CLIENT_NAME,,}.com}"
+        OPENCODE_CONFIG_PATH="${OPENCODE_CONFIG_PATH:-$HOME/.config/opencode}"
+        AGENTS_HOME="${AGENTS_HOME:-$HOME/.agents}"
+        DEFAULT_MODEL="${DEFAULT_MODEL:-opencode-go/deepseek-v4-flash}"
+        PRO_MODEL="${PRO_MODEL:-opencode-go/deepseek-v4-pro}"
+        MULTIMODAL_MODEL="${MULTIMODAL_MODEL:-opencode-go/mimo-v2.5}"
+    fi
+
     # Limpiar pantalla
     clear
 
@@ -843,19 +883,6 @@ main() {
     echo "║     🏗️  Builder — Suite de Agentes OpenCode v${VERSION}    ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
-
-    # ─── Help ───
-    if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-        echo "Uso: bash builder.sh [--auto]"
-        echo ""
-        echo "Opciones:"
-        echo "  --auto       Usa valores por defecto (no recomendado para primera vez)"
-        echo "  --help       Muestra esta ayuda"
-        echo ""
-        echo "Este script configura e instala la suite de agentes OpenCode"
-        echo "en el equipo del cliente."
-        exit 0
-    fi
 
     # ─── Ejecutar fases (11 fases) ───
     check_prereqs

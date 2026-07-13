@@ -74,11 +74,13 @@ trap cleanup EXIT
 check_prereqs() {
     header "FASE 1/10 — Verificando requisitos"
 
-    # Bash version
-    if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
-        error "Se requiere bash 4.0+. Versión actual: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"
-        warn "En macOS: brew install bash"
-        exit 1
+    # Bash version (compatible macOS 3.2+)
+    if [ "${BASH_VERSINFO[0]}" -lt 3 ]; then
+        error "Se requiere bash 3.2+. Versión actual: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"
+        HAS_ERRORS=1
+    elif [ "${BASH_VERSINFO[0]}" -eq 3 ]; then
+        warn "bash 3.x detectado. En macOS considera: brew install bash (para funcionalidad completa)"
+        info "Continuando con bash ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]} — funciones básicas OK"
     fi
     log "Bash ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]} — OK"
 

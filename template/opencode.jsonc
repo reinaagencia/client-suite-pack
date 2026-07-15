@@ -7,9 +7,5 @@
       "enabled": false
     }
   },
-  "_notes": {
-    "playwright": "Habilítalo si necesitas navegador web. Instala con: npm install -g @playwright/mcp",
-    "custom_mcp": "Agrega aquí otros MCP servers según necesites (Canva, Alpaca, Google, WhatsApp, etc.)",
-    "documentation": "Ver CONFIGURATION.md para guía de configuración de cada MCP server"
-  }
+  "//": "Ver CONFIGURATION.md para guía de configuración de cada MCP server"
 }

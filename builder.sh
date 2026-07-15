@@ -128,7 +128,8 @@ collect_config() {
         log "Cliente: $CLIENT_NAME"
         log "Orquestador: $ORQUESTADOR"
         log "Workspace: $WORKSPACE_PATH"
-        display_config_summary
+        log "Email: $ADMIN_EMAIL"
+        log "Modelo default: $DEFAULT_MODEL"
         return
     fi
 
@@ -297,18 +298,18 @@ install_agents() {
         # Copiar y reemplazar placeholders
         cp "$TEMPLATE_FILE" "$DEST_FILE"
 
-        # Reemplazar placeholders con sed (compatible GNU y BSD/macOS)
-        sed -i '' "s/{{CLIENT_NAME}}/$CLIENT_NAME/g" "$DEST_FILE" 2>/dev/null || \
-        sed -i "s/{{CLIENT_NAME}}/$CLIENT_NAME/g" "$DEST_FILE"
+        # Reemplazar placeholders con sed (delimitador | para evitar conflictos con / en rutas y modelos)
+        sed -i '' "s|{{CLIENT_NAME}}|$CLIENT_NAME|g" "$DEST_FILE" 2>/dev/null || \
+        sed -i "s|{{CLIENT_NAME}}|$CLIENT_NAME|g" "$DEST_FILE"
 
-        sed -i '' "s/{{ORQUESTADOR}}/$ORQUESTADOR/g" "$DEST_FILE" 2>/dev/null || \
-        sed -i "s/{{ORQUESTADOR}}/$ORQUESTADOR/g" "$DEST_FILE"
+        sed -i '' "s|{{ORQUESTADOR}}|$ORQUESTADOR|g" "$DEST_FILE" 2>/dev/null || \
+        sed -i "s|{{ORQUESTADOR}}|$ORQUESTADOR|g" "$DEST_FILE"
 
         sed -i '' "s|{{WORKSPACE_PATH}}|$WORKSPACE_PATH|g" "$DEST_FILE" 2>/dev/null || \
         sed -i "s|{{WORKSPACE_PATH}}|$WORKSPACE_PATH|g" "$DEST_FILE"
 
-        sed -i '' "s/{{ADMIN_EMAIL}}/$ADMIN_EMAIL/g" "$DEST_FILE" 2>/dev/null || \
-        sed -i "s/{{ADMIN_EMAIL}}/$ADMIN_EMAIL/g" "$DEST_FILE"
+        sed -i '' "s|{{ADMIN_EMAIL}}|$ADMIN_EMAIL|g" "$DEST_FILE" 2>/dev/null || \
+        sed -i "s|{{ADMIN_EMAIL}}|$ADMIN_EMAIL|g" "$DEST_FILE"
 
         sed -i '' "s|{{OPENCODE_CONFIG_PATH}}|$OPENCODE_CONFIG_PATH|g" "$DEST_FILE" 2>/dev/null || \
         sed -i "s|{{OPENCODE_CONFIG_PATH}}|$OPENCODE_CONFIG_PATH|g" "$DEST_FILE"
@@ -316,14 +317,14 @@ install_agents() {
         sed -i '' "s|{{AGENTS_HOME}}|$AGENTS_HOME|g" "$DEST_FILE" 2>/dev/null || \
         sed -i "s|{{AGENTS_HOME}}|$AGENTS_HOME|g" "$DEST_FILE"
 
-        sed -i '' "s/{{DEFAULT_MODEL}}/$DEFAULT_MODEL/g" "$DEST_FILE" 2>/dev/null || \
-        sed -i "s/{{DEFAULT_MODEL}}/$DEFAULT_MODEL/g" "$DEST_FILE"
+        sed -i '' "s|{{DEFAULT_MODEL}}|$DEFAULT_MODEL|g" "$DEST_FILE" 2>/dev/null || \
+        sed -i "s|{{DEFAULT_MODEL}}|$DEFAULT_MODEL|g" "$DEST_FILE"
 
-        sed -i '' "s/{{PRO_MODEL}}/$PRO_MODEL/g" "$DEST_FILE" 2>/dev/null || \
-        sed -i "s/{{PRO_MODEL}}/$PRO_MODEL/g" "$DEST_FILE"
+        sed -i '' "s|{{PRO_MODEL}}|$PRO_MODEL|g" "$DEST_FILE" 2>/dev/null || \
+        sed -i "s|{{PRO_MODEL}}|$PRO_MODEL|g" "$DEST_FILE"
 
-        sed -i '' "s/{{MULTIMODAL_MODEL}}/$MULTIMODAL_MODEL/g" "$DEST_FILE" 2>/dev/null || \
-        sed -i "s/{{MULTIMODAL_MODEL}}/$MULTIMODAL_MODEL/g" "$DEST_FILE"
+        sed -i '' "s|{{MULTIMODAL_MODEL}}|$MULTIMODAL_MODEL|g" "$DEST_FILE" 2>/dev/null || \
+        sed -i "s|{{MULTIMODAL_MODEL}}|$MULTIMODAL_MODEL|g" "$DEST_FILE"
 
         COUNT=$((COUNT + 1))
         log "Agente instalado: $(basename "$DEST_FILE")"
@@ -346,11 +347,11 @@ install_configs() {
 
     cp "$TEMPLATES_DIR/opencode.json" "$OPENCODE_CONFIG_PATH/opencode.json"
 
-    # Reemplazar placeholders
-    sed -i '' "s/{{DEFAULT_MODEL}}/$DEFAULT_MODEL/g" "$OPENCODE_CONFIG_PATH/opencode.json" 2>/dev/null || \
-    sed -i "s/{{DEFAULT_MODEL}}/$DEFAULT_MODEL/g" "$OPENCODE_CONFIG_PATH/opencode.json"
-    sed -i '' "s/{{ORQUESTADOR}}/$ORQUESTADOR/g" "$OPENCODE_CONFIG_PATH/opencode.json" 2>/dev/null || \
-    sed -i "s/{{ORQUESTADOR}}/$ORQUESTADOR/g" "$OPENCODE_CONFIG_PATH/opencode.json"
+    # Reemplazar placeholders (delimitador | para evitar conflictos con /)
+    sed -i '' "s|{{DEFAULT_MODEL}}|$DEFAULT_MODEL|g" "$OPENCODE_CONFIG_PATH/opencode.json" 2>/dev/null || \
+    sed -i "s|{{DEFAULT_MODEL}}|$DEFAULT_MODEL|g" "$OPENCODE_CONFIG_PATH/opencode.json"
+    sed -i '' "s|{{ORQUESTADOR}}|$ORQUESTADOR|g" "$OPENCODE_CONFIG_PATH/opencode.json" 2>/dev/null || \
+    sed -i "s|{{ORQUESTADOR}}|$ORQUESTADOR|g" "$OPENCODE_CONFIG_PATH/opencode.json"
     sed -i '' "s|{{AGENTS_HOME}}|$AGENTS_HOME|g" "$OPENCODE_CONFIG_PATH/opencode.json" 2>/dev/null || \
     sed -i "s|{{AGENTS_HOME}}|$AGENTS_HOME|g" "$OPENCODE_CONFIG_PATH/opencode.json"
 

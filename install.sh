@@ -17,8 +17,8 @@ VERSION="2.1.0"
 REPO_OWNER="reinaagencia"
 REPO_NAME="client-suite-pack"
 REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
-SUPABASE_URL="https://rhaabimsiwbrpugaliah.supabase.co"
-SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJoYWFiaW1zaXdicnB1Z2FsaWFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMTI0OTgsImV4cCI6MjA5NTU4ODQ5OH0.7bPgXf12YpM4Jv6iFqFIaVHy5K4rMqnWXNPKBAMCVeA"
+SUPABASE_URL="https://gegklkperqguypexsbtw.supabase.co"
+SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdlZ2tsa3BlcnFndXlwZXhzYnR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNTI2NjIsImV4cCI6MjA5OTYyODY2Mn0.v4yPjLb5FTw0MfGUouhsbS9pz-mlo0PU0TPJCUnIVSA"
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'

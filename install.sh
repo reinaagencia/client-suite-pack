@@ -188,11 +188,23 @@ main() {
         read -r -p "  Presiona Enter para continuar o Ctrl+C para cancelar..."
     fi
     
-    # ─── 3. Clonar repositorio ────────────────────────────────────────
-    header "Descargando suite"
+    # ─── 3. Preparar suite ────────────────────────────────────────────
+    header "Preparando suite"
     
     local INSTALL_DIR="${HOME}/.reina-suite"
-    if [ -d "$INSTALL_DIR" ]; then
+    
+    # Si ya estamos dentro del directorio client-suite-pack (ZIP), copiar en vez de clonar
+    if [ -f "./builder.sh" ]; then
+        SCRIPT_SRC="$(pwd)"
+        info "Ejecutando desde ZIP local: ${SCRIPT_SRC}"
+        if [ "$SCRIPT_SRC" != "$INSTALL_DIR" ]; then
+            mkdir -p "$INSTALL_DIR"
+            cp -r "$SCRIPT_SRC"/* "$INSTALL_DIR"/ 2>/dev/null
+            log "Suite copiada a ${INSTALL_DIR}"
+        else
+            log "Ya estamos en ${INSTALL_DIR}"
+        fi
+    elif [ -d "$INSTALL_DIR" ]; then
         warn "Directorio ${INSTALL_DIR} ya existe."
         echo -e "  ${BOLD}1)${NC} Actualizar (git pull)"
         echo -e "  ${BOLD}2)${NC} Reemplazar (borrar y clonar)"
@@ -200,13 +212,25 @@ main() {
         read -r -p "  Opción [1/2/3] (default: 1): " choice
         choice="${choice:-1}"
         case "$choice" in
-            1) (cd "$INSTALL_DIR" && git pull) && log "Suite actualizada" || error "Error actualizando" ;;
-            2) rm -rf "$INSTALL_DIR" && git clone "$REPO_URL" "$INSTALL_DIR" && log "Suite clonada" || error "Error clonando" ;;
+            1) (cd "$INSTALL_DIR" && git pull 2>/dev/null) && log "Suite actualizada" || warn "Error actualizando" ;;
+            2) rm -rf "$INSTALL_DIR" && git clone "$REPO_URL" "$INSTALL_DIR" 2>/dev/null && log "Suite clonada" || warn "No se pudo clonar (repos privados?)" ;;
             *) info "Usando suite existente." ;;
         esac
     else
         info "Clonando suite desde GitHub..."
-        git clone "$REPO_URL" "$INSTALL_DIR" && log "Suite descargada en ${INSTALL_DIR}" || { error "Error descargando"; exit 1; }
+        git clone "$REPO_URL" "$INSTALL_DIR" 2>/dev/null && log "Suite descargada en ${INSTALL_DIR}" || {
+            warn "No se pudo clonar desde GitHub (repos privados?)."
+            warn "Usa el ZIP manual: descarga y extrae en ${INSTALL_DIR}"
+            info "Creando directorio vacío temporal..."
+            mkdir -p "$INSTALL_DIR"
+        }
+    fi
+    
+    # Verificar que builder.sh existe
+    if [ ! -f "$INSTALL_DIR/builder.sh" ]; then
+        error "No se encontró builder.sh en ${INSTALL_DIR}"
+        error "Asegúrate de extraer el ZIP completo en esa carpeta."
+        exit 1
     fi
     
     # ─── 4. Ejecutar builder ──────────────────────────────────────────

@@ -108,8 +108,12 @@ validate_license() {
         info "Modo auto: continuando sin validación de licencia."
         return 0
     fi
-    warn "No se pudo validar la licencia automáticamente."
-    info "Esto puede ocurrir si es la primera instalación."
+    warn "No se pudo validar la licencia contra Supabase."
+    info "Posibles causas:"
+    info "  • La license key es incorrecta"
+    info "  • El PC no tiene acceso a internet"
+    info "  • Firewall bloqueando la conexión a Supabase"
+    info "La instalación continuará sin validación por ahora."
     echo -e ""
     echo -e "  ${BOLD}1)${NC} Continuar de todas formas (instalación libre)"
     echo -e "  ${BOLD}2)${NC} Cancelar e intentar más tarde"

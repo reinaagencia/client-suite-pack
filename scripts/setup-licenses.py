@@ -24,10 +24,12 @@ import httpx
 from datetime import date, timedelta
 
 # ─── Config ───────────────────────────────────────────────────────────────────
-SUPABASE_URL = "https://rhaabimsiwbrpugaliah.supabase.co"
+# ⚠️ PROYECTO CORRECTO: gegklkperqguypexsbtw (client-licenses)
+# NO USAR rhaabimsiwbrpugaliah (obsoleto / no tiene las tablas)
+SUPABASE_URL = "https://gegklkperqguypexsbtw.supabase.co"
 SERVICE_KEY = os.environ.get(
     "SUPABASE_SERVICE_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJoYWFiaW1zaXdicnB1Z2FsaWFoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDAxMjQ5OCwiZXhwIjoyMDk1NTg4NDk4fQ.9LYcBnM465kS9pmf7gkrB1y5B0YSyfM7BtBUf7CtACI"
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdlZ2tsa3BlcnFndXlwZXhzYnR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNTI2NjIsImV4cCI6MjA5OTYyODY2Mn0.v4yPjLb5FTw0MfGUouhsbS9pz-mlo0PU0TPJCUnIVSA"
 )
 
 HEADERS = {

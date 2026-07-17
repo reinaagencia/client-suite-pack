@@ -6,6 +6,5 @@
       "command": ["npx", "@playwright/mcp@latest"],
       "enabled": false
     }
-  },
-  "//": "Ver CONFIGURATION.md para guía de configuración de cada MCP server"
+  }
 }

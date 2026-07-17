@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="2.1.0"
+VERSION="2.2.0"
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 REPO_OWNER="reinaagencia"
@@ -58,6 +58,12 @@ for arg in "$@"; do
             echo "  --key=XXXX    License key (opcional, si no se provee se pedirá)"
             echo "  --auto        Modo no interactivo (usa valores por defecto)"
             echo "  --help        Muestra esta ayuda"
+            echo ""
+            echo "Características:"
+            echo "  • Detecta automáticamente instalaciones previas → modo upgrade"
+            echo "  • Respaldos automáticos antes de modificar configs existentes"
+            echo "  • Verifica PowerShell execution policy (Windows)"
+            echo "  • Verifica que opencode funcione post-instalación"
             exit 0
             ;;
     esac
@@ -142,6 +148,102 @@ record_installation() {
         }" 2>/dev/null || true
 }
 
+# ─── Detectar si es Windows ───────────────────────────────────────────────────
+is_windows() {
+    [ -n "$WINDIR" ] || echo "$OS" | grep -qi "windows\|mingw\|cygwin" 2>/dev/null
+}
+
+# ─── Verificar PowerShell execution policy (Windows) ─────────────────────────
+check_windows_powershell() {
+    if ! is_windows; then
+        return 0
+    fi
+    
+    # Verificar si opencode está instalado vía npm (para saber si necesitamos PowerShell)
+    local npm_opencode
+    npm_opencode=$(npm list -g opencode-ai 2>/dev/null || echo "")
+    if [ -z "$npm_opencode" ]; then
+        return 0  # No está instalado globalmente, no hay problema
+    fi
+    
+    # Intentar detectar execution policy
+    local policy
+    policy=$(powershell -NoProfile -Command "Get-ExecutionPolicy -Scope CurrentUser" 2>/dev/null || echo "Restricted")
+    
+    if [ "$policy" = "Restricted" ]; then
+        warn "PowerShell execution policy: ${policy}"
+        echo -e "  ${YELLOW}⚠️  Esto puede bloquear el comando 'opencode' después de la instalación.${NC}"
+        echo -e ""
+        echo -e "  Para evitar errores, ejecuta en PowerShell como administrador:"
+        echo -e "  ${CYAN}Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned${NC}"
+        echo -e ""
+        echo -e "  O puedes continuar y arreglarlo después (solo afecta a scripts .ps1)"
+        echo -e ""
+        
+        if [ "$AUTO_MODE" = false ]; then
+            read -r -p "  Presiona Enter para continuar..."
+        fi
+    fi
+}
+
+# ─── Detectar instalación existente de la suite ──────────────────────────────
+detect_existing_suite() {
+    # Buscar suite-config.json
+    if [ -f "${HOME}/.agents/suite-config.json" ]; then
+        log "Instalación previa detectada en ~/.agents/suite-config.json"
+        return 0
+    fi
+    
+    # Buscar agentes
+    local agent_path="${HOME}/.config/opencode/agent"
+    if [ -d "$agent_path" ] && ls "$agent_path/"*.md &>/dev/null 2>&1; then
+        local count
+        count=$(ls "$agent_path/"*.md 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$count" -ge 3 ]; then
+            log "Instalación previa detectada: ${count} agentes en ${agent_path}"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+# ─── Verificar que opencode funciona post-instalación ────────────────────────
+verify_opencode_postinstall() {
+    info "Verificando instalación de OpenCode..."
+    
+    if ! command -v opencode &>/dev/null; then
+        warn "OpenCode no está en el PATH."
+        info "Instálalo con: npm install -g opencode-ai"
+        return 1
+    fi
+    
+    local opencode_path
+    opencode_path=$(which opencode)
+    
+    # Si es .ps1, verificar execution policy o sugerir CMD
+    if echo "$opencode_path" | grep -qi "\.ps1$"; then
+        if is_windows; then
+            warn "OpenCode se ejecuta vía PowerShell (.ps1)."
+            echo -e "  ${YELLOW}Si ves error 'No se puede cargar el archivo opencode.ps1':${NC}"
+            echo -e "  ${YELLOW}→${NC} En PowerShell como administrador:"
+            echo -e "    ${CYAN}Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned${NC}"
+            echo -e "  ${YELLOW}→${NC} O usa CMD (Command Prompt) en vez de PowerShell:"
+            echo -e "    ${CYAN}opencode${NC}"
+        fi
+    fi
+    
+    # Verificar versión
+    local version
+    version=$(opencode --version 2>/dev/null || echo "")
+    if [ -n "$version" ]; then
+        log "OpenCode ${version} — OK"
+    else
+        warn "OpenCode instalado pero no responde. Reinstala con:"
+        warn "  npm uninstall -g opencode-ai && npm install -g opencode-ai"
+    fi
+}
+
 # ═════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═════════════════════════════════════════════════════════════════════════════
@@ -161,12 +263,16 @@ main() {
     command -v bash &>/dev/null || { error "bash no encontrado"; HAS_ERRORS=1; }
     command -v git &>/dev/null || { error "git no encontrado"; HAS_ERRORS=1; }
     command -v python3 &>/dev/null || { error "python3 no encontrado"; HAS_ERRORS=1; }
+    command -v npm &>/dev/null || { warn "npm no encontrado (necesario para instalar OpenCode)"; }
     
     if [ "$HAS_ERRORS" -eq 1 ]; then
         error "Requisitos insuficientes. Instala git y python3 primero."
         exit 1
     fi
     log "Requisitos mínimos cumplidos (bash + git + python3)"
+    
+    # ─── 1b. Verificar Windows/PowerShell (solo Windows) ──────────────
+    check_windows_powershell
     
     # ─── 2. License key ───────────────────────────────────────────────
     header "Validación de licencia"
@@ -190,6 +296,28 @@ main() {
         echo -e "  ${YELLOW}⚠️  Sin validación, instalación libre.${NC}"
         echo -e ""
         read -r -p "  Presiona Enter para continuar o Ctrl+C para cancelar..."
+    fi
+    
+    # ─── 2b. Detectar instalación existente ──────────────────────────
+    local IS_UPGRADE=false
+    if detect_existing_suite; then
+        echo -e "\n${YELLOW}${BOLD}⚠️  Se detectó una instalación previa de la suite.${NC}"
+        echo -e "  ${BOLD}1)${NC} Actualizar (respalda configs existentes y actualiza templates, skills y memoria)"
+        echo -e "  ${BOLD}2)${NC} Instalación limpia (sobrescribe todo)"
+        echo -e "  ${BOLD}3)${NC} Cancelar"
+        echo -e ""
+        if [ "$AUTO_MODE" = false ]; then
+            read -r -p "  Opción [1/2/3] (default: 1): " upgrade_choice
+            upgrade_choice="${upgrade_choice:-1}"
+        else
+            upgrade_choice="1"
+        fi
+        
+        case "$upgrade_choice" in
+            2) IS_UPGRADE=false; info "Modo instalación limpia." ;;
+            3) info "Instalación cancelada."; exit 0 ;;
+            *) IS_UPGRADE=true; log "Modo actualización activado." ;;
+        esac
     fi
     
     # ─── 3. Preparar suite ────────────────────────────────────────────
@@ -239,13 +367,14 @@ main() {
     
     # ─── 4. Ejecutar builder ──────────────────────────────────────────
     header "Instalando suite"
-    info "Ejecutando builder.sh — 11 fases de instalación..."
+    info "Ejecutando builder.sh..."
     
     # Pasar license key como variable de entorno para que builder.sh la use
     export SUITE_LICENSE_KEY="${LICENSE_KEY}"
-    # Pasar flag --auto si estamos en modo auto
+    # Pasar flags al builder
     local BUILDER_FLAGS=""
-    [ "$AUTO_MODE" = true ] && BUILDER_FLAGS="--auto"
+    [ "$AUTO_MODE" = true ] && BUILDER_FLAGS="${BUILDER_FLAGS} --auto"
+    [ "$IS_UPGRADE" = true ] && BUILDER_FLAGS="${BUILDER_FLAGS} --upgrade"
     (cd "$INSTALL_DIR" && bash builder.sh $BUILDER_FLAGS) || { error "Error ejecutando builder.sh"; exit 1; }
     
     # ─── 5. Registrar instalación ─────────────────────────────────────
@@ -253,15 +382,29 @@ main() {
         record_installation "$LICENSE_KEY"
     fi
     
-    # ─── 6. Resumen final ─────────────────────────────────────────────
+    # ─── 6. Verificar opencode post-instalación ───────────────────────
+    echo
+    verify_opencode_postinstall
+    
+    # ─── 7. Resumen final ─────────────────────────────────────────────
     header "Instalación completada"
     echo -e "${GREEN}${BOLD}"
     echo "  ✅ Suite de Agentes OpenCode v${VERSION} instalada"
     echo ""
+    [ "$IS_UPGRADE" = true ] && echo "  🔄 Modo actualización — configs anteriores respaldadas en ~/.agents/backup-*/"
     echo "  📍 Suite:     ${INSTALL_DIR}"
     echo "  🚀 Abre OpenCode y empieza a usar tus agentes"
     echo "  💡 Prueba:    'Hola, ¿qué agentes tienes disponibles?'"
     echo "  📖 Más info:  cat ${INSTALL_DIR}/SUITE.md"
+    echo ""
+    
+    # Nota para Windows
+    if is_windows; then
+        echo -e "  ${YELLOW}📌 Windows: Si 'opencode' falla, prueba:${NC}"
+        echo -e "  ${YELLOW}   1.${NC} PowerShell como administrador → Set-ExecutionPolicy RemoteSigned -Scope CurrentUser"
+        echo -e "  ${YELLOW}   2.${NC} O usa CMD (Command Prompt) en vez de PowerShell"
+        echo -e "  ${YELLOW}   3.${NC} Si el binario está dañado: npm uninstall -g opencode-ai && npm install -g opencode-ai"
+    fi
     echo -e "${NC}"
 }
 

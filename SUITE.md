@@ -1,6 +1,6 @@
 # 🏗️ Suite de Agentes OpenCode para Clientes
 
-> **Versión:** 2.1 | **Builder:** builder.sh (11 fases) | **Agentes:** 11 | **Skills:** 31 | **Pipeline:** agent-swarm con MoA + Bash-Native
+> **Versión:** 2.2 | **Builder:** builder.sh (12 fases) | **Agentes:** 11 | **Skills:** 31 | **Pipeline:** agent-swarm con MoA + Bash-Native | **Upgrade:** detección + respaldo automático
 
 ---
 
@@ -183,6 +183,16 @@ Usuario → {{ORQUESTADOR}}
                        │      [Memoria en línea] heurísticas → próximo ciclo
                       7. auto-save en memoria de sesiones
 ```
+
+### 🆕 Novedades v2.2
+
+| Mejora | Descripción | Impacto |
+|--------|-------------|---------|
+| **Modo Upgrade** | Detecta instalación previa, respalda configs, actualiza en limpio | Transición sin pérdida de datos |
+| **Respaldo automático** | `backup-{timestamp}/` con agents, configs, skills, memoria | Rollback manual posible |
+| **Verificación post-instalación** | Verifica que opencode binario existe y responde | Detecta binarios corruptos |
+| **Compatibilidad Windows** | Detecta PowerShell execution policy, guía al usuario | Primer `opencode` siempre funciona |
+| **Fix opencode.jsonc** | Eliminada llave `//` que causaba `Unrecognized key` | Error de configuración eliminado |
 
 ### 🆕 Novedades v2.1
 

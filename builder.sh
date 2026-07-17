@@ -25,7 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/template"
 AGENTS_DIR="$TEMPLATES_DIR/agents"
 SKILLS_SRC="$SCRIPT_DIR/skills"
-VERSION="2.1.0"
+VERSION="2.2.0"
 LOG_FILE="/tmp/suite-builder-$(date +%Y%m%d-%H%M%S).log"
 
 # ─── Colores (compatibles macOS/Linux) ───────────────────────────────────────
@@ -51,6 +51,8 @@ MULTIMODAL_MODEL=""
 
 # ─── Auto mode (usar valores por defecto) ──
 AUTO_MODE=false
+UPGRADE_MODE=false   # --upgrade: actualizar instalación existente
+EXISTING_CONFIG=""   # Ruta a configuración existente detectada
 
 # ─── Funciones de utilidad ────────────────────────────────────────────────────
 
@@ -71,6 +73,181 @@ cleanup() {
     exit $exit_code
 }
 trap cleanup EXIT
+
+# ─── Detección de instalación existente ───────────────────────────────────────
+# Busca si el cliente ya tiene una suite instalada previamente.
+# Returns 0 si existe, 1 si no.
+# Llena variables globales con la configuración existente.
+detect_existing() {
+    local config_paths=(
+        "${HOME}/.config/opencode/opencode.json"
+        "${HOME}/.config/opencode/agent"
+        "${HOME}/.agents/memoria-reinicio.md"
+        "${HOME}/.agents/suite-config.json"
+    )
+    
+    # Buscar suite-config.json guardado (configuración de instalación anterior)
+    if [ -f "${HOME}/.agents/suite-config.json" ]; then
+        EXISTING_CONFIG="${HOME}/.agents/suite-config.json"
+        info "Instalación previa detectada: ${EXISTING_CONFIG}"
+        return 0
+    fi
+    
+    # Buscar agentes instalados
+    if [ -d "${HOME}/.config/opencode/agent" ] && ls "${HOME}/.config/opencode/agent/"*.md &>/dev/null 2>&1; then
+        local count
+        count=$(ls "${HOME}/.config/opencode/agent/"*.md 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$count" -ge 3 ]; then
+            info "Instalación previa detectada: ${count} agentes en ~/.config/opencode/agent/"
+            return 0
+        fi
+    fi
+    
+    # Buscar agentes en la ruta configurada del usuario
+    local configured_path="${OPENCODE_CONFIG_PATH:-${HOME}/.config/opencode}"
+    if [ -d "$configured_path/agent" ] && ls "$configured_path/agent/"*.md &>/dev/null 2>&1; then
+        local count2
+        count2=$(ls "$configured_path/agent/"*.md 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$count2" -ge 3 ]; then
+            info "Instalación previa detectada en ${configured_path}/agent/"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+# ─── Leer configuración existente desde suite-config.json ────────────────────
+read_existing_config() {
+    if [ ! -f "$EXISTING_CONFIG" ]; then
+        return 1
+    fi
+    
+    # Extraer valores del JSON
+    local cfg
+    cfg=$(cat "$EXISTING_CONFIG")
+    
+    CLIENT_NAME=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('client_name',''))" 2>/dev/null || echo "")
+    ORQUESTADOR=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('orquestador',''))" 2>/dev/null || echo "")
+    WORKSPACE_PATH=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('workspace_path',''))" 2>/dev/null || echo "")
+    ADMIN_EMAIL=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('admin_email',''))" 2>/dev/null || echo "")
+    OPENCODE_CONFIG_PATH=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('opencode_config_path',''))" 2>/dev/null || echo "")
+    AGENTS_HOME=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('agents_home',''))" 2>/dev/null || echo "")
+    DEFAULT_MODEL=$(echo "$cfg" | python3 "models" 2>/dev/null || echo "")
+    
+    # Si no se pudo leer, marcar upgrade manual
+    if [ -z "$CLIENT_NAME" ]; then
+        warn "No se pudieron leer todos los valores de la configuración existente."
+        info "Se te pedirá la información necesaria durante la actualización."
+        return 1
+    fi
+    
+    log "Configuración existente cargada: ${CLIENT_NAME}"
+    return 0
+}
+
+# ─── Respaldar instalación existente ─────────────────────────────────────────
+backup_existing() {
+    local backup_dir="${AGENTS_HOME}/backup-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_dir"
+    info "Creando respaldo en: ${backup_dir}"
+    
+    # Respaldar configs de OpenCode
+    if [ -f "$OPENCODE_CONFIG_PATH/opencode.json" ]; then
+        cp "$OPENCODE_CONFIG_PATH/opencode.json" "$backup_dir/opencode.json"
+        log "Respaldo: opencode.json"
+    fi
+    if [ -f "$OPENCODE_CONFIG_PATH/opencode.jsonc" ]; then
+        cp "$OPENCODE_CONFIG_PATH/opencode.jsonc" "$backup_dir/opencode.jsonc"
+        log "Respaldo: opencode.jsonc"
+    fi
+    
+    # Respaldar agentes
+    if [ -d "$OPENCODE_CONFIG_PATH/agent" ]; then
+        cp -r "$OPENCODE_CONFIG_PATH/agent" "$backup_dir/agents"
+        log "Respaldo: agent/ (todos los agentes)"
+    fi
+    
+    # Respaldar skills (solo customized, no las del pack)
+    if [ -d "$AGENTS_HOME/skills" ]; then
+        cp -r "$AGENTS_HOME/skills" "$backup_dir/skills"
+        log "Respaldo: skills/"
+    fi
+    
+    # Respaldar memoria
+    if [ -f "$AGENTS_HOME/memoria-reinicio.md" ]; then
+        cp "$AGENTS_HOME/memoria-reinicio.md" "$backup_dir/"
+        log "Respaldo: memoria-reinicio.md"
+    fi
+    if [ -d "$AGENTS_HOME/memoria-sessions" ]; then
+        cp -r "$AGENTS_HOME/memoria-sessions" "$backup_dir/"
+        log "Respaldo: memoria-sessions/"
+    fi
+    
+    echo
+    log "Respaldo completado en: ${backup_dir}"
+    echo -e "  ${YELLOW}⚠️  Puedes restaurar manualmente desde: ${backup_dir}${NC}"
+    echo
+}
+
+# ─── Verificar opencode binary después de instalar ───────────────────────────
+verify_opencode_binary() {
+    local has_error=false
+    
+    # Buscar opencode en PATH
+    local opencode_path=""
+    if command -v opencode &>/dev/null; then
+        opencode_path=$(which opencode)
+    fi
+    
+    if [ -n "$opencode_path" ]; then
+        log "OpenCode encontrado en: ${opencode_path}"
+        
+        # Si es PowerShell script (.ps1), advertir sobre execution policy
+        if echo "$opencode_path" | grep -qi "\.ps1$"; then
+            warn "OpenCode se ejecuta vía PowerShell (.ps1)."
+            warn "Si ves errores de 'execution policy', ejecuta en PowerShell como administrador:"
+            echo -e "  ${CYAN}Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned${NC}"
+        fi
+        
+        # En Windows, verificar que el .exe existe y no es 0 KB
+        if echo "$OS" | grep -qi "windows\|mingw\|cygwin" 2>/dev/null || [ -n "$WINDIR" ]; then
+            local exe_path=""
+            exe_path=$(echo "$opencode_path" | sed 's/\.ps1$/.exe/' 2>/dev/null || echo "")
+            if [ -n "$exe_path" ] && [ -f "$exe_path" ]; then
+                local size
+                size=$(stat -f%z "$exe_path" 2>/dev/null || wc -c < "$exe_path" 2>/dev/null || echo "0")
+                if [ "$size" -gt 1000 ] 2>/dev/null; then
+                    log "Binario opencode.exe verificado: $(numfmt --to=iec $size 2>/dev/null || echo "${size} bytes")"
+                else
+                    warn "opencode.exe parece corrupto (solo ${size} bytes). Reinstala con:"
+                    echo -e "  ${CYAN}npm uninstall -g opencode-ai && npm install -g opencode-ai${NC}"
+                    has_error=true
+                fi
+            fi
+        fi
+        
+        # Verificar que responde (--version)
+        local version
+        version=$(opencode --version 2>/dev/null || echo "")
+        if [ -n "$version" ]; then
+            log "OpenCode versión: ${version}"
+        else
+            warn "No se pudo verificar la versión de OpenCode."
+            warn "Si falla, reinstala con: npm uninstall -g opencode-ai && npm install -g opencode-ai"
+        fi
+    else
+        warn "OpenCode no está instalado en el PATH."
+        info "Instálalo con: npm install -g opencode-ai"
+        info "O descárgalo desde: https://opencode.ai/"
+        has_error=true
+    fi
+    
+    if [ "$has_error" = true ]; then
+        echo
+        warn "Hay problemas con la instalación de OpenCode. Revisa los mensajes arriba."
+    fi
+}
 
 # ─── Fase 1: Verificar prerequisitos ─────────────────────────────────────────
 
@@ -337,12 +514,16 @@ install_agents() {
 # ─── Fase 5: Instalar archivos de configuración ──────────────────────────────
 
 install_configs() {
-    header "FASE 5/10 — Instalando configuración de OpenCode"
+    header "FASE 5/12 — Instalando configuración de OpenCode"
 
     # opencode.json
     if [ -f "$OPENCODE_CONFIG_PATH/opencode.json" ]; then
-        warn "opencode.json ya existe. Se creará respaldo: opencode.json.bak"
-        cp "$OPENCODE_CONFIG_PATH/opencode.json" "$OPENCODE_CONFIG_PATH/opencode.json.bak"
+        if [ "$UPGRADE_MODE" = true ]; then
+            log "Actualizando opencode.json (respaldo guardado en backup/)"
+        else
+            warn "opencode.json ya existe. Se creará respaldo: opencode.json.bak"
+            cp "$OPENCODE_CONFIG_PATH/opencode.json" "$OPENCODE_CONFIG_PATH/opencode.json.bak"
+        fi
     fi
 
     cp "$TEMPLATES_DIR/opencode.json" "$OPENCODE_CONFIG_PATH/opencode.json"
@@ -359,8 +540,12 @@ install_configs() {
 
     # opencode.jsonc
     if [ -f "$OPENCODE_CONFIG_PATH/opencode.jsonc" ]; then
-        warn "opencode.jsonc ya existe. Se creará respaldo: opencode.jsonc.bak"
-        cp "$OPENCODE_CONFIG_PATH/opencode.jsonc" "$OPENCODE_CONFIG_PATH/opencode.jsonc.bak"
+        if [ "$UPGRADE_MODE" = true ]; then
+            log "Actualizando opencode.jsonc (respaldo guardado en backup/)"
+        else
+            warn "opencode.jsonc ya existe. Se creará respaldo: opencode.jsonc.bak"
+            cp "$OPENCODE_CONFIG_PATH/opencode.jsonc" "$OPENCODE_CONFIG_PATH/opencode.jsonc.bak"
+        fi
     fi
 
     cp "$TEMPLATES_DIR/opencode.jsonc" "$OPENCODE_CONFIG_PATH/opencode.jsonc"
@@ -445,9 +630,46 @@ install_skills() {
 # ─── Fase 7: Inicializar memoria de reinicio ─────────────────────────────────
 
 init_memory() {
-    header "FASE 7/10 — Inicializando sistema de memoria"
+    header "FASE 7/12 — Inicializando sistema de memoria"
 
     local MEMORIA_SESSIONS="$AGENTS_HOME/memoria-sessions"
+
+    # En upgrade, preservar sesiones existentes
+    if [ "$UPGRADE_MODE" = true ] && [ -f "$MEMORIA_SESSIONS/index.json" ]; then
+        log "Sistema de memoria existente preservado (${MEMORIA_SESSIONS})"
+        
+        # Solo actualizar memoria-reinicio.md si no existe
+        if [ ! -f "$AGENTS_HOME/memoria-reinicio.md" ]; then
+            cat > "$AGENTS_HOME/memoria-reinicio.md" << EOF
+# 🧠 Memoria de Reinicio — Sesiones Activas
+
+> **Generado:** $(date '+%Y-%m-%dT%H:%M:%S%z')
+> Este archivo se actualiza **automáticamente** en cada iteración del agente.
+> Gestiona **0** sesiones independientes — cada una en su propio archivo.
+
+---
+
+## 📋 Sesiones abiertas
+
+*No hay sesiones activas todavía. Crea tu primer proyecto y la memoria se poblará automáticamente.*
+
+---
+EOF
+            log "Creado: memoria-reinicio.md (no existía)"
+        fi
+        
+        # Actualizar schema si es más nuevo
+        if [ -f "$TEMPLATES_DIR/memoria/memoria-sessions-schema.json" ]; then
+            cp "$TEMPLATES_DIR/memoria/memoria-sessions-schema.json" "$MEMORIA_SESSIONS/"
+            log "Schema de memoria actualizado"
+        fi
+        
+        log "Sistema de memoria verificado correctamente"
+        return
+    fi
+
+    # Instalación limpia — crear desde cero
+    mkdir -p "$MEMORIA_SESSIONS"
 
     # 1. Crear session-actual.md
     echo "NINGUNA" > "$MEMORIA_SESSIONS/session-actual.md"
@@ -852,16 +1074,36 @@ main() {
     for arg in "$@"; do
         case $arg in
             --auto) AUTO_MODE=true ;;
+            --upgrade|--update) UPGRADE_MODE=true ;;
             --help|-h)
-                echo "Uso: bash builder.sh [--auto]"
+                echo "Uso: bash builder.sh [--auto] [--upgrade]"
                 echo ""
                 echo "Opciones:"
                 echo "  --auto       Usa valores por defecto"
+                echo "  --upgrade    Actualiza instalación existente (detecta + respalda + sobrescribe)"
                 echo "  --help       Muestra esta ayuda"
                 exit 0
                 ;;
         esac
     done
+    
+    # ─── Detectar instalación existente ───
+    detect_existing
+    if [ $? -eq 0 ] && [ "$UPGRADE_MODE" = false ]; then
+        echo -e "\n${YELLOW}${BOLD}⚠️  Se detectó una instalación previa de la suite.${NC}"
+        echo -e "  ${BOLD}1)${NC} Actualizar instalación existente (recomendado — respalda y sobrescribe)"
+        echo -e "  ${BOLD}2)${NC} Instalación limpia (sobrescribe todo)"
+        echo -e "  ${BOLD}3)${NC} Cancelar"
+        echo ""
+        read -r -p "  Opción [1/2/3] (default: 1): " upgrade_choice
+        upgrade_choice="${upgrade_choice:-1}"
+        
+        case "$upgrade_choice" in
+            2) UPGRADE_MODE=false; info "Modo instalación limpia." ;;
+            3) info "Instalación cancelada."; exit 0 ;;
+            *) UPGRADE_MODE=true ;;
+        esac
+    fi
 
     # ─── Auto mode: valores por defecto ───
     if [ "$AUTO_MODE" = true ]; then
@@ -885,17 +1127,62 @@ main() {
     echo "╚══════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 
-    # ─── Ejecutar fases (11 fases) ───
+    # ─── Modo upgrade ───
+    if [ "$UPGRADE_MODE" = true ]; then
+        header "🔄 MODO ACTUALIZACIÓN — Instalación existente detectada"
+        
+        # Cargar configuración existente
+        read_existing_config
+        if [ $? -ne 0 ] && [ "$AUTO_MODE" = false ]; then
+            # Si falla la lectura, preguntar datos manualmente
+            warn "No se pudo cargar la configuración. Ingresa los datos manualmente."
+            collect_config
+        fi
+        
+        # Mostrar resumen de la configuración detectada
+        echo -e "  ${BOLD}Cliente:${NC}          ${CLIENT_NAME:-$(whoami)}"
+        echo -e "  ${BOLD}Orquestador:${NC}      ${ORQUESTADOR:-$CLIENT_NAME}"
+        echo -e "  ${BOLD}Workspace:${NC}        ${WORKSPACE_PATH:-$HOME/Dev}"
+        echo -e "  ${BOLD}Config OpenCode:${NC}  ${OPENCODE_CONFIG_PATH:-$HOME/.config/opencode}"
+        echo -e "  ${BOLD}Agents home:${NC}      ${AGENTS_HOME:-$HOME/.agents}\n"
+        
+        # Confirmar antes de respaldar y actualizar
+        if [ "$AUTO_MODE" = false ]; then
+            read -r -p "$(echo -e "${BOLD}¿Actualizar con esta configuración?${NC} (s/N): ")" confirm_upgrade
+            if [[ ! "$confirm_upgrade" =~ ^[sS]$ ]]; then
+                info "Actualización cancelada."
+                exit 0
+            fi
+        fi
+        
+        # RESPALDAR antes de modificar
+        backup_existing
+    fi
+    
+    # ─── Ejecutar fases (11-12 fases) ───
     check_prereqs
-    collect_config
+    
+    # Saltar collect_config si estamos en upgrade y ya cargamos la config
+    if [ "$UPGRADE_MODE" = false ]; then
+        collect_config
+    else
+        # En upgrade, mostrar que preservamos la config existente
+        header "FASE 2/12 — Configuración preservada"
+        log "Usando configuración existente de: ${CLIENT_NAME}"
+        log "Orquestador: ${ORQUESTADOR}"
+        log "Workspace: ${WORKSPACE_PATH}"
+        log "Modelo default: ${DEFAULT_MODEL:-opencode-go/deepseek-v4-flash}"
+    fi
+    
     create_dirs
     install_agents
     install_configs
     install_skills
     init_memory
     init_diary
-    install_pipeline    # 🆕 FASE 9: Pipeline agent-swarm
+    install_pipeline
     verify_installation
+    verify_opencode_binary    # 🆕 Verificación del binario opencode
     show_summary
 
     # ─── Crear archivo de finalización para AGENTS.md ───

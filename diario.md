@@ -173,5 +173,64 @@ OpenCode no reconoce `//` como clave válida en su schema, lo que hace fallar la
 No usar pseudo-comentarios con claves no estándar (`"//"`, `"_notes"`) en archivos de configuración de OpenCode. El validador JSON del cliente rechaza cualquier clave no reconocida por el schema.
 
 ### Pendientes
-- [ ] Re-empaquetar el ZIP (`client-suite-pack.zip`) para que incluya el fix
-- [ ] Notificar a Sebastián que edite manualmente su `opencode.jsonc` (borrar línea del `"//"`)
+- [x] Re-empaquetar el ZIP (`client-suite-pack.zip`) — ✅ hecho
+- [x] Notificar a Sebastián que edite manualmente su `opencode.jsonc` — ✅ PowerShell command dado
+
+---
+
+## 🚀 Sesión 4 — 17 Julio 2026 — v2.2.0: Upgrade Mode + Lecciones Sebastián
+
+### Commits: *(pendiente)*
+
+### Contexto
+
+Sebastián completó la instalación exitosamente. Durante el proceso surgieron varios incidentes que sirvieron como lecciones para mejorar el pack instalador:
+
+### Lecciones aprendidas (de la instalación de Sebastián)
+
+| # | Problema | Solución aplicada en v2.2 |
+|---|---|---|
+| 1 | `opencode.jsonc` con llave `"//"` inválida | Template corregido + fix validación JSON |
+| 2 | PowerShell execution policy bloquea scripts `.ps1` | Nuevo `check_windows_powershell()` en install.sh |
+| 3 | `opencode.exe` corrupto (>0 KB), comando falla | Nueva `verify_opencode_binary()` post-instalación |
+| 4 | Cliente con instalación previa (Javi Arce) | Nuevo modo `--upgrade` con detección + respaldo |
+| 5 | Cliente no sabe qué responder en preguntas del builder | Mejores prompts y detección de entorno |
+| 6 | Error de sintaxis npm (faltó package name) | Mejores mensajes de error en verify |
+
+### Mejoras implementadas en v2.2
+
+**builder.sh:**
+- Nuevo flag `--upgrade` / `--update` para actualizar instalaciones existentes
+- Nueva función `detect_existing()` — busca instalaciones previas
+- Nueva función `backup_existing()` — respaldo completo (agents, configs, skills, memoria)
+- Nueva función `read_existing_config()` — lee `suite-config.json` de instalación anterior
+- Nueva función `verify_opencode_binary()` — verifica binario post-instalación
+- `init_memory()` — ahora preserva sesiones existentes en modo upgrade
+- Fase expandida de 11 a 12 fases (con verify_opencode_binary)
+
+**install.sh:**
+- Nueva función `is_windows()` — detección multiplataforma
+- Nueva función `check_windows_powershell()` — advierte sobre execution policy
+- Nueva función `detect_existing_suite()` — detecta suite v1 previa
+- Nueva función `verify_opencode_postinstall()` — verifica opencode funcional
+- Ahora pasa `--upgrade` al builder automáticamente si detecta instalación previa
+- Bump v2.1.0 → v2.2.0
+
+**SUITE.md:**
+- Tabla de novedades v2.2 añadida
+
+**ZIP:**
+- Re-empaquetado `client-suite-pack.zip` con todo incluido
+
+### Archivos modificados
+
+| Archivo | Cambios |
+|---------|---------|
+| `builder.sh` | +250 líneas: upgrade mode, detección, backup, verify binary |
+| `install.sh` | +90 líneas: Windows checks, detección suite, verify post-install, bump v2.2 |
+| `SUITE.md` | Novedades v2.2 |
+| `template/opencode.jsonc` | (ya corregido en Sesión 3) |
+| `diario.md` | Esta entrada |
+
+### Pendientes
+- [ ] Instalar v2.2 en equipo de Javi Arce (modo upgrade desde v1)

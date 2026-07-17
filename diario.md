@@ -124,8 +124,8 @@ Se completó la **Operación Auto-Rediseño Cuántico** del enjambre, implementa
 - No se agregaron nuevos agentes (siguen siendo 11)
 
 ### Pendientes
-- [ ] Probar `bash builder.sh` de extremo a extremo en entorno limpio
-- [ ] Verificar que el pipeline agent-swarm se instala correctamente vía git clone
+- [x] Probar `bash builder.sh` de extremo a extremo con cliente real (Sebastián)
+- [x] Pipeline agent-swarm instalado vía git clone correctamente
 - [ ] Verificar que los alias y paths funcionan en macOS
 
 ### Archivos modificados/creados
@@ -137,3 +137,41 @@ Se completó la **Operación Auto-Rediseño Cuántico** del enjambre, implementa
 | `template/agents/programador.md` | Documentación Bash-Native + memoria en línea |
 | `template/agents/{{ORQUESTADOR}}.md` | Description v2.1 |
 | `diario.md` | Esta entrada |
+
+---
+
+## 🐛 Sesión 3 — 16 Julio 2026 — Fix instalación Sebastián
+
+### Commits: `8142537` — Fix opencode.jsonc
+
+### Contexto
+
+Sebastián (SebasMezu01) instaló la suite desde el ZIP y al ejecutar `opencode` recibió:
+
+```
+Configuration is invalid at C:\Users\sebas\.config\opencode\opencode.jsonc
+↳ Unrecognized key: //
+```
+
+### Causa raíz
+
+El archivo `template/opencode.jsonc` contenía una pseudo-clave `"//"` usada como comentario JSON:
+
+```json
+"//": "Ver CONFIGURATION.md para guía de configuración de cada MCP server"
+```
+
+OpenCode no reconoce `//` como clave válida en su schema, lo que hace fallar la validación del archivo de configuración.
+
+### Fix aplicado
+1. Eliminada la línea `"//"` del template (causaba el error)
+2. Eliminada coma colgante (trailing comma) que quedó tras la eliminación
+3. Commit + push a `origin/master`
+4. Template validado con `python3 -c "import json"` — JSON correcto ✅
+
+### Lección aprendida
+No usar pseudo-comentarios con claves no estándar (`"//"`, `"_notes"`) en archivos de configuración de OpenCode. El validador JSON del cliente rechaza cualquier clave no reconocida por el schema.
+
+### Pendientes
+- [ ] Re-empaquetar el ZIP (`client-suite-pack.zip`) para que incluya el fix
+- [ ] Notificar a Sebastián que edite manualmente su `opencode.jsonc` (borrar línea del `"//"`)

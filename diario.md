@@ -234,3 +234,42 @@ Sebastián completó la instalación exitosamente. Durante el proceso surgieron 
 
 ### Pendientes
 - [ ] Instalar v2.2 en equipo de Javi Arce (modo upgrade desde v1)
+
+---
+
+## 🐛 Sesión 4b — 17 Julio 2026 — Hotfix: WINDIR unbound variable
+
+### Commit: `48a3d39`
+
+### Contexto
+Al ejecutar `bash install.sh` en el MacBook Air de Javi, el script falló inmediatamente con:
+```
+install.sh: line 153: WINDIR: unbound variable
+```
+
+### Causa raíz
+La función `is_windows()` recién agregada usaba `$WINDIR` y `$OS` (variables de Windows) sin valor por defecto. El script tiene `set -u` habilitado, que causa que bash termine con error cuando se referencia una variable no definida.
+
+### Fix aplicado
+```bash
+# Antes (roto en macOS/Linux):
+[ -n "$WINDIR" ] || echo "$OS" | grep -qi "windows"
+
+# Después (funciona en todos lados):
+[ -n "${WINDIR:-}" ] || echo "${OS:-}" | grep -qi "windows"
+```
+
+### Archivos modificados
+| Archivo | Línea | Cambio |
+|---------|-------|--------|
+| `install.sh` | 153 | `$WINDIR` → `${WINDIR:-}`, `$OS` → `${OS:-}` |
+| `builder.sh` | 214 | Mismo fix en `verify_opencode_binary()` |
+
+### Verificación
+✅ `bash -n install.sh` — sintaxis OK
+✅ `bash -n builder.sh` — sintaxis OK
+✅ `is_windows()` simulado devuelve `false` en macOS
+✅ ZIP re-empaquetado con el fix
+
+### Lección aprendida
+⚠️ **Siempre** usar `${VAR:-}` en lugar de `$VAR` en scripts con `set -u` cuando la variable podría no existir en todos los SO.

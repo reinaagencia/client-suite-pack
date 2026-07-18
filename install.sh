@@ -149,8 +149,9 @@ record_installation() {
 }
 
 # ─── Detectar si es Windows ───────────────────────────────────────────────────
+# Usa ${VAR:-} para evitar "unbound variable" con set -u en macOS/Linux
 is_windows() {
-    [ -n "$WINDIR" ] || echo "$OS" | grep -qi "windows\|mingw\|cygwin" 2>/dev/null
+    [ -n "${WINDIR:-}" ] || echo "${OS:-}" | grep -qi "windows\|mingw\|cygwin" 2>/dev/null
 }
 
 # ─── Verificar PowerShell execution policy (Windows) ─────────────────────────

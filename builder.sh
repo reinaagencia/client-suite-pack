@@ -211,7 +211,7 @@ verify_opencode_binary() {
         fi
         
         # En Windows, verificar que el .exe existe y no es 0 KB
-        if echo "$OS" | grep -qi "windows\|mingw\|cygwin" 2>/dev/null || [ -n "$WINDIR" ]; then
+        if echo "${OS:-}" | grep -qi "windows\|mingw\|cygwin" 2>/dev/null || [ -n "${WINDIR:-}" ]; then
             local exe_path=""
             exe_path=$(echo "$opencode_path" | sed 's/\.ps1$/.exe/' 2>/dev/null || echo "")
             if [ -n "$exe_path" ] && [ -f "$exe_path" ]; then

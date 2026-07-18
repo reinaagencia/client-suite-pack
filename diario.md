@@ -273,3 +273,38 @@ La función `is_windows()` recién agregada usaba `$WINDIR` y `$OS` (variables d
 
 ### Lección aprendida
 ⚠️ **Siempre** usar `${VAR:-}` en lugar de `$VAR` en scripts con `set -u` cuando la variable podría no existir en todos los SO.
+
+---
+
+## 🐛 Sesión 4c — 17 Julio 2026 — Hotfix: model null en agents
+
+### Commit: `1bec002`
+
+### Contexto
+Después de que el WINDIR fix permitió la instalación, Javi ejecutó `opencode` y recibió:
+```
+Configuration is invalid at /Users/javiarce/.config/opencode/agent/investigador.md
+[✗] Expected string | undefined, got null model
+```
+
+### Causa raíz
+La función `read_existing_config()` en builder.sh tenía un bug en la línea 136:
+```bash
+# ANTES (roto):
+DEFAULT_MODEL=$(echo "$cfg" | python3 "models" 2>/dev/null || echo "")
+```
+Esto ejecutaba `python3 "models"` como si fuera un archivo, no como código Python. Siempre fallaba y DEFAULT_MODEL quedaba vacío.
+
+Además, el modelo en el JSON guardado está anidado como `models.default`, no como `default_model` plano.
+
+Al quedar DEFAULT_MODEL="" el sed hacía: `s|{{DEFAULT_MODEL}}||g` → `model: {{DEFAULT_MODEL}}` → `model: ` → YAML interpreta como `null`.
+
+### Fix aplicado
+1. Corregida la extracción del modelo: `json.load().get('models',{}).get('default','')`
+2. Agregadas las mismas líneas para PRO_MODEL y MULTIMODAL_MODEL
+3. Agregados fallbacks: si modelo vacío → valores por defecto (`deepseek-v4-flash`, etc.)
+
+### Verificación
+✅ Extracción de modelo probada con Python directo
+✅ Fallbacks asignados correctamente
+✅ ZIP re-empaquetado

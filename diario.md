@@ -308,3 +308,50 @@ Al quedar DEFAULT_MODEL="" el sed hacía: `s|{{DEFAULT_MODEL}}||g` → `model: {
 ✅ Extracción de modelo probada con Python directo
 ✅ Fallbacks asignados correctamente
 ✅ ZIP re-empaquetado
+
+---
+
+## 🧹 Sesión 4d — 17 Julio 2026 — --clean mode + fix doble pregunta
+
+### Commit: `57691ea`
+
+### Contexto
+Javi encontró el mismo `model: null` en `tester.md`. En lugar de arreglar archivo por archivo, mejor: **opción de limpieza total** que borre todo e instale desde cero.
+
+### Cambios implementados
+
+**builder.sh:**
+- Nuevo flag `--clean` / `--fresh`
+- Nueva función `clean_installation()` que elimina:
+  - Todos los agentes en `~/.config/opencode/agent/*.md`
+  - `opencode.json` y `opencode.jsonc`
+  - Respaldos `.bak`
+  - `suite-config.json`
+  - `memoria-reinicio.md`
+  - Skills (con confirmación — pregunta si borrar)
+  - `session-actual.md` (se recrea automáticamente)
+- **Preserva** `memoria-sessions/` (datos del cliente)
+- La detección existente ya no pregunta si vino flag explícito
+
+**install.sh:**
+- Opción 2 "Instalación limpia" ahora pasa `--clean` al builder
+- Eliminada redundancia: ya no pregunta dos veces
+
+### Flujo corregido
+
+| Opción | Antes (roto) | Ahora |
+|--------|-------------|-------|
+| 1 (Actualizar) | `--upgrade` → ok | `--upgrade` → ok |
+| 2 (Limpiar) | sin flag → builder preguntaba otra vez | `--clean` → borra todo e instala |
+| 3 (Cancelar) | exit | exit |
+
+### Archivos modificados
+| Archivo | Cambio |
+|---------|--------|
+| `builder.sh` | +clean_installation(), +--clean flag, detect_existing no pregunta con flag |
+| `install.sh` | IS_CLEAN flag, pasa --clean al builder, mensajes actualizados |
+
+### Verificación
+✅ `bash -n install.sh` — sintaxis OK
+✅ `bash -n builder.sh` — sintaxis OK
+✅ ZIP re-empaquetado

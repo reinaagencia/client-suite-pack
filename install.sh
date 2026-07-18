@@ -61,6 +61,7 @@ for arg in "$@"; do
             echo ""
             echo "Características:"
             echo "  • Detecta automáticamente instalaciones previas → modo upgrade"
+            echo "  • Opción de instalación limpia (borra todo e instala desde cero)"
             echo "  • Respaldos automáticos antes de modificar configs existentes"
             echo "  • Verifica PowerShell execution policy (Windows)"
             echo "  • Verifica que opencode funcione post-instalación"
@@ -301,10 +302,11 @@ main() {
     
     # ─── 2b. Detectar instalación existente ──────────────────────────
     local IS_UPGRADE=false
+    local IS_CLEAN=false
     if detect_existing_suite; then
         echo -e "\n${YELLOW}${BOLD}⚠️  Se detectó una instalación previa de la suite.${NC}"
-        echo -e "  ${BOLD}1)${NC} Actualizar (respalda configs existentes y actualiza templates, skills y memoria)"
-        echo -e "  ${BOLD}2)${NC} Instalación limpia (sobrescribe todo)"
+        echo -e "  ${BOLD}1)${NC} Actualizar (respalda configs existentes y actualiza)"
+        echo -e "  ${BOLD}2)${NC} Instalación limpia (borra TODO e instala desde cero)"
         echo -e "  ${BOLD}3)${NC} Cancelar"
         echo -e ""
         if [ "$AUTO_MODE" = false ]; then
@@ -315,9 +317,9 @@ main() {
         fi
         
         case "$upgrade_choice" in
-            2) IS_UPGRADE=false; info "Modo instalación limpia." ;;
+            2) IS_CLEAN=true; info "🧹 Modo instalación limpia — se borrará todo." ;;
             3) info "Instalación cancelada."; exit 0 ;;
-            *) IS_UPGRADE=true; log "Modo actualización activado." ;;
+            *) IS_UPGRADE=true; log "🔄 Modo actualización activado." ;;
         esac
     fi
     
@@ -376,6 +378,7 @@ main() {
     local BUILDER_FLAGS=""
     [ "$AUTO_MODE" = true ] && BUILDER_FLAGS="${BUILDER_FLAGS} --auto"
     [ "$IS_UPGRADE" = true ] && BUILDER_FLAGS="${BUILDER_FLAGS} --upgrade"
+    [ "$IS_CLEAN" = true ] && BUILDER_FLAGS="${BUILDER_FLAGS} --clean"
     (cd "$INSTALL_DIR" && bash builder.sh $BUILDER_FLAGS) || { error "Error ejecutando builder.sh"; exit 1; }
     
     # ─── 5. Registrar instalación ─────────────────────────────────────

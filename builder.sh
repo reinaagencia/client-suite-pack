@@ -52,6 +52,7 @@ MULTIMODAL_MODEL=""
 # ─── Auto mode (usar valores por defecto) ──
 AUTO_MODE=false
 UPGRADE_MODE=false   # --upgrade: actualizar instalación existente
+CLEAN_MODE=false     # --clean: borrar todo e instalar desde cero
 EXISTING_CONFIG=""   # Ruta a configuración existente detectada
 
 # ─── Funciones de utilidad ────────────────────────────────────────────────────
@@ -189,6 +190,85 @@ backup_existing() {
     echo
     log "Respaldo completado en: ${backup_dir}"
     echo -e "  ${YELLOW}⚠️  Puedes restaurar manualmente desde: ${backup_dir}${NC}"
+    echo
+}
+
+# ─── Limpieza total de instalación anterior (--clean) ─────────────────────────
+# Borra TODOS los archivos de la suite existente para una instalación desde cero.
+# NO pregunta — es destructivo. Usar solo con confirmación del usuario.
+clean_installation() {
+    header "🧹 LIMPIEZA TOTAL — Eliminando instalación anterior"
+    
+    # Usar los valores detectados o por defecto
+    local agent_dir="${OPENCODE_CONFIG_PATH:-$HOME/.config/opencode}/agent"
+    local config_dir="${OPENCODE_CONFIG_PATH:-$HOME/.config/opencode}"
+    local agents_home="${AGENTS_HOME:-$HOME/.agents}"
+    
+    # 1. Eliminar agentes
+    if [ -d "$agent_dir" ]; then
+        local count
+        count=$(ls "$agent_dir/"*.md 2>/dev/null | wc -l | tr -d ' ')
+        rm -f "$agent_dir/"*.md 2>/dev/null
+        log "Agentes eliminados: ${count} archivos de ${agent_dir}"
+    fi
+    
+    # 2. Eliminar configs de OpenCode
+    for cfg in "opencode.json" "opencode.jsonc"; do
+        if [ -f "$config_dir/$cfg" ]; then
+            rm -f "$config_dir/$cfg"
+            log "Config eliminada: ${config_dir}/${cfg}"
+        fi
+    done
+    
+    # 3. Eliminar respaldos .bak
+    for bak in "$config_dir/"*.bak; do
+        [ -f "$bak" ] && rm -f "$bak" && log "Respaldo eliminado: $(basename $bak)"
+    done
+    
+    # 4. Eliminar suite-config.json
+    if [ -f "$agents_home/suite-config.json" ]; then
+        rm -f "$agents_home/suite-config.json"
+        log "suite-config.json eliminado"
+    fi
+    
+    # 5. Eliminar memoria de reinicio (NO memoria-sessions — preserva datos del cliente)
+    if [ -f "$agents_home/memoria-reinicio.md" ]; then
+        rm -f "$agents_home/memoria-reinicio.md"
+        log "memoria-reinicio.md eliminado"
+    fi
+    
+    # 6. Skills: preguntar si borrar (son grandes y reinstalables)
+    if [ -d "$agents_home/skills" ]; then
+        echo -e ""
+        echo -e "  ${YELLOW}📚 ¿Eliminar skills existentes en ${agents_home}/skills/?${NC}"
+        echo -e "  (Se reinstalarán desde el pack, pero si personalizaste alguna, se perderá)"
+        echo -e ""
+        echo -e "  ${BOLD}1)${NC} Sí, eliminar todo (instalación verdaderamente limpia)"
+        echo -e "  ${BOLD}2)${NC} No, solo sobrescribir las que vienen en el pack"
+        echo -e ""
+        if [ "$AUTO_MODE" = true ]; then
+            read -r -p "  Opción [1/2] (default: 2): " clean_skills
+            clean_skills="${clean_skills:-2}"
+        else
+            clean_skills="2"
+        fi
+        
+        if [ "$clean_skills" = "1" ]; then
+            rm -rf "$agents_home/skills"/*
+            log "Skills eliminadas"
+        else
+            log "Skills preservadas (se sobrescribirán con las del pack)"
+        fi
+    fi
+    
+    # 7. session-actual.md (se recrea automáticamente)
+    if [ -f "$agents_home/memoria-sessions/session-actual.md" ]; then
+        rm -f "$agents_home/memoria-sessions/session-actual.md"
+        log "session-actual.md reiniciado"
+    fi
+    
+    echo
+    log "Limpieza completada. Instalación desde cero lista."
     echo
 }
 
@@ -1077,34 +1157,56 @@ main() {
         case $arg in
             --auto) AUTO_MODE=true ;;
             --upgrade|--update) UPGRADE_MODE=true ;;
+            --clean|--fresh) CLEAN_MODE=true ; UPGRADE_MODE=false ;;
             --help|-h)
-                echo "Uso: bash builder.sh [--auto] [--upgrade]"
+                echo "Uso: bash builder.sh [--auto] [--upgrade] [--clean]"
                 echo ""
                 echo "Opciones:"
                 echo "  --auto       Usa valores por defecto"
                 echo "  --upgrade    Actualiza instalación existente (detecta + respalda + sobrescribe)"
+                echo "  --clean      Elimina instalación anterior por completo e instala desde cero"
                 echo "  --help       Muestra esta ayuda"
                 exit 0
                 ;;
         esac
     done
     
-    # ─── Detectar instalación existente ───
-    detect_existing
-    if [ $? -eq 0 ] && [ "$UPGRADE_MODE" = false ]; then
-        echo -e "\n${YELLOW}${BOLD}⚠️  Se detectó una instalación previa de la suite.${NC}"
-        echo -e "  ${BOLD}1)${NC} Actualizar instalación existente (recomendado — respalda y sobrescribe)"
-        echo -e "  ${BOLD}2)${NC} Instalación limpia (sobrescribe todo)"
-        echo -e "  ${BOLD}3)${NC} Cancelar"
-        echo ""
-        read -r -p "  Opción [1/2/3] (default: 1): " upgrade_choice
-        upgrade_choice="${upgrade_choice:-1}"
-        
-        case "$upgrade_choice" in
-            2) UPGRADE_MODE=false; info "Modo instalación limpia." ;;
-            3) info "Instalación cancelada."; exit 0 ;;
-            *) UPGRADE_MODE=true ;;
-        esac
+    # ─── Modo clean: borrar todo antes de instalar ───
+    if [ "$CLEAN_MODE" = true ]; then
+        warn "Modo limpieza total: se borrará la instalación anterior."
+        if [ "$AUTO_MODE" = false ]; then
+            echo -e "  ${YELLOW}⚠️  Esto eliminará agentes, configs y skills existentes.${NC}"
+            echo -e "  ${YELLOW}   Las sesiones de memoria se preservan.${NC}"
+            echo -e ""
+            read -r -p "  ${BOLD}¿Continuar?${NC} (s/N): " confirm_clean
+            if [[ ! "$confirm_clean" =~ ^[sS]$ ]]; then
+                info "Limpieza cancelada."
+                exit 0
+            fi
+        fi
+        clean_installation
+    fi
+    
+    # ─── Detectar instalación existente (solo si no hay flag explícito) ───
+    if [ "$UPGRADE_MODE" = false ] && [ "$CLEAN_MODE" = false ]; then
+        if detect_existing; then
+            echo -e "\n${YELLOW}${BOLD}⚠️  Se detectó una instalación previa de la suite.${NC}"
+            echo -e "  ${BOLD}1)${NC} Actualizar instalación existente (recomendado)"
+            echo -e "  ${BOLD}2)${NC} Instalación limpia (borra todo e instala desde cero)"
+            echo -e "  ${BOLD}3)${NC} Cancelar"
+            echo ""
+            read -r -p "  Opción [1/2/3] (default: 1): " upgrade_choice
+            upgrade_choice="${upgrade_choice:-1}"
+            
+            case "$upgrade_choice" in
+                2) 
+                    info "Modo limpieza total."
+                    clean_installation
+                    ;;
+                3) info "Instalación cancelada."; exit 0 ;;
+                *) UPGRADE_MODE=true ;;
+            esac
+        fi
     fi
 
     # ─── Auto mode: valores por defecto ───

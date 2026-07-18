@@ -133,7 +133,9 @@ read_existing_config() {
     ADMIN_EMAIL=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('admin_email',''))" 2>/dev/null || echo "")
     OPENCODE_CONFIG_PATH=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('opencode_config_path',''))" 2>/dev/null || echo "")
     AGENTS_HOME=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('agents_home',''))" 2>/dev/null || echo "")
-    DEFAULT_MODEL=$(echo "$cfg" | python3 "models" 2>/dev/null || echo "")
+    DEFAULT_MODEL=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('models',{}).get('default',''))" 2>/dev/null || echo "")
+    PRO_MODEL=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('models',{}).get('pro',''))" 2>/dev/null || echo "")
+    MULTIMODAL_MODEL=$(echo "$cfg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('models',{}).get('multimodal',''))" 2>/dev/null || echo "")
     
     # Si no se pudo leer, marcar upgrade manual
     if [ -z "$CLIENT_NAME" ]; then
@@ -1144,7 +1146,16 @@ main() {
         echo -e "  ${BOLD}Orquestador:${NC}      ${ORQUESTADOR:-$CLIENT_NAME}"
         echo -e "  ${BOLD}Workspace:${NC}        ${WORKSPACE_PATH:-$HOME/Dev}"
         echo -e "  ${BOLD}Config OpenCode:${NC}  ${OPENCODE_CONFIG_PATH:-$HOME/.config/opencode}"
-        echo -e "  ${BOLD}Agents home:${NC}      ${AGENTS_HOME:-$HOME/.agents}\n"
+        echo -e "  ${BOLD}Agents home:${NC}      ${AGENTS_HOME:-$HOME/.agents}"
+        
+        # Fallback para modelos si la lectura devolvió vacío
+        DEFAULT_MODEL="${DEFAULT_MODEL:-opencode-go/deepseek-v4-flash}"
+        PRO_MODEL="${PRO_MODEL:-opencode-go/deepseek-v4-pro}"
+        MULTIMODAL_MODEL="${MULTIMODAL_MODEL:-opencode-go/mimo-v2.5}"
+        echo -e "  ${BOLD}Modelo default:${NC}   $DEFAULT_MODEL"
+        echo -e "  ${BOLD}Modelo premium:${NC}   $PRO_MODEL"
+        echo -e "  ${BOLD}Modelo multimodal:${NC} $MULTIMODAL_MODEL"
+        echo ""
         
         # Confirmar antes de respaldar y actualizar
         if [ "$AUTO_MODE" = false ]; then

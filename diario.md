@@ -355,3 +355,50 @@ Javi encontró el mismo `model: null` en `tester.md`. En lugar de arreglar archi
 ✅ `bash -n install.sh` — sintaxis OK
 ✅ `bash -n builder.sh` — sintaxis OK
 ✅ ZIP re-empaquetado
+
+---
+
+## 🚀 Sesión 5 — 23 Julio 2026 — Pack Lanzador v1.0
+
+### Commit: `e0ac6e3`
+
+### Contexto
+Después de instalar la suite v2.2 en el equipo de Javi (con --clean mode), se necesita añadir el agente **Lanzador** con su base de conocimiento de lanzamientos digitales.
+
+### Qué se creó
+
+**template/agents/lanzador.md** (201 líneas):
+- Agente especializado en lanzamientos digitales
+- Domina 4 frameworks: PLF (Jeff Walker), TPL (Álvaro Luque), TWM (Santi Padilla), Funnel Mindset (Russell Brunson)
+- Capacidades: estrategia de lanzamiento, copywriting, gestión de tráfico, optimización
+- Deliverables: plan de lanzamiento, secuencias de email, guión de sales page, anuncios
+- Placeholders: `{{DEFAULT_MODEL}}`, `{{CLIENT_NAME}}`
+
+**skills/domain/lanzamientos-digitales/SKILL.md** (770 líneas):
+- 9 secciones con conocimiento integral
+- Frameworks detallados (PLF, TPL, TWM, Funnel Mindset)
+- Estructura de embudos (lead magnet, webinar, challenge, evergreen)
+- Copywriting: fórmulas de headlines, estructura de sales page, guiones de email
+- Secuencias completas (prelanzamiento, venta, post-compra, no-compradores)
+- Tráfico pagado y orgánico con benchmarks
+- Métricas y KPIs con fórmulas
+- Plataformas y herramientas (Hotmart, Kiwify, Kajabi, etc.)
+- Checklists (pre, durante, post lanzamiento)
+- Glosario de 35+ términos
+
+**scripts/install-lanzador.sh** (210 líneas):
+- Instalador autónomo para añadir el pack a una suite existente
+- Detecta suite-config.json y reemplaza placeholders
+- Verifica que no queden `{{...}}` sin reemplazar
+
+### Archivos creados
+| Archivo | Líneas |
+|---------|--------|
+| `template/agents/lanzador.md` | 201 |
+| `skills/domain/lanzamientos-digitales/SKILL.md` | 770 |
+| `scripts/install-lanzador.sh` | 210 |
+| `SUITE.md` (modificado) | Pack Lanzador marcado como disponible |
+
+### Pendientes
+- [ ] **Instalar suite base v2.2 en Javi** → `bash install.sh` → opción 2 (limpia)
+- [ ] **Instalar Pack Lanzador en Javi** → `bash scripts/install-lanzador.sh`

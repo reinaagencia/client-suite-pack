@@ -244,6 +244,6 @@ Ver `SKILLS.md` para el catálogo completo.
 
 | Pack | Contenido | Disponible |
 |------|-----------|------------|
-| **Client Suite Pack** (este) | 11 agentes: desarrollo + ops + especializados | ✅ Ahora |
+| **Client Suite Pack** (este) | 11 agentes: desarrollo + ops + especializados + **Lanzador** | ✅ Ahora |
+| **Lanzador Pack** | Agente lanzador + skill lanzamientos-digitales (770 líneas de conocimiento) | ✅ Ahora — `bash scripts/install-lanzador.sh` |
 | **Trader Pack** | Agente trader + análisis financiero | Próximamente |
-| **Lanzador Pack** | Agente lanzador + marketing digital | Próximamente |
